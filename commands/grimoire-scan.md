@@ -7,7 +7,15 @@ allowed-tools:
 현재 작업 디렉토리에서 claude-grimoire 스캐너를 실행하여 사용자의
 서클(1-10)을 판정하고 `~/.claude/grimoire/state.json`에 기록한다.
 
+기본 루브릭(v1, keyword-based):
 !`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/grimoire.py" scan`
+
+증거 기반 루브릭(v2, evidence-weighted — 더 정확함):
+!`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/grimoire.py" scan --rubric v2`
+
+scan은 state.json 외에 `~/.claude/grimoire/sprite.txt`도 갱신한다.
+`export GRIMOIRE_MASCOT=1`을 shell profile에 추가하면 다음 Claude Code
+세션부터 statusline에 서클별 ASCII 마스코트가 표시된다.
 
 스캔이 끝나면 Claude는 출력된 강점/성장 포인트 중 가장 중요한 1-2가지를
 한글로 요약해서 사용자에게 전달한다. 그 외 장황한 해설은 하지 않는다.
