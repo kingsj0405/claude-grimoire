@@ -41,6 +41,21 @@ REPO_ROOT = Path(
 )
 TEMPLATES_DIR = REPO_ROOT / "templates" / "spellbooks"
 
+# Circle ASCII sprites (3 lines × ~8 cols, pure ASCII — safe for all terminals)
+# Written to ~/.claude/grimoire/sprite.txt by `scan`; read by statusline in mascot mode.
+CIRCLE_SPRITES: dict[int, str] = {
+    1:  "  ,-.  \n ( o ) \n  `-'  ",   # 견습 마법사
+    2:  " [mdl] \n (o.o) \n  ---  ",   # 서기관
+    3:  "  o o  \n (o-o) \n  \\_/  ",  # 이중 시전자
+    4:  " ~v~~v \n (>.o) \n  ---  ",   # 바람의 직조사
+    5:  " * . * \n (^.^) \n * . * ",   # 성좌 술사
+    6:  " /=o=\\ \n |o.o| \n \\===/ ",  # 시간 굴절사
+    7:  " .-o-. \n |X.X| \n `---' ",   # 차원 설계사
+    8:  " #X#X# \n (X.X) \n  ---  ",   # 혼돈의 지배자
+    9:  "  /|\\  \n (9.9) \n  ---  ",  # 세계수의 현자
+    10: " \\*/*/ \n (*.*) \n  ---  ",  # 대마법사
+}
+
 CIRCLE_TITLES = {
     1: ("견습 마법사", "Apprentice"),
     2: ("서기관", "Scribe"),
@@ -549,6 +564,14 @@ def save_state(data: dict) -> Path:
     return STATE_FILE
 
 
+def write_sprite(circle: int) -> Path:
+    """Write the circle's ASCII sprite to ~/.claude/grimoire/sprite.txt."""
+    sprite_path = STATE_DIR / "sprite.txt"
+    sprite = CIRCLE_SPRITES.get(circle, CIRCLE_SPRITES[1])
+    sprite_path.write_text(sprite + "\n", encoding="utf-8")
+    return sprite_path
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: scan
 # ---------------------------------------------------------------------------
@@ -584,6 +607,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if rubric == "v2" and "evidence" in result:
         state["evidence"] = result["evidence"]
     path = save_state(state)
+    write_sprite(result["circle"])
 
     _, title_en = CIRCLE_TITLES[result["circle"]]
     print(f"✦ 당신의 서클: {result['circle']} ◈ {result['title']} ({title_en})")
