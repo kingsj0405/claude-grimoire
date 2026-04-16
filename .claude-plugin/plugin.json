@@ -1,0 +1,9 @@
+{
+  "name": "grimoire",
+  "version": "0.1.0",
+  "description": "Circle-based Claude Code maturity tracker with spellbooks and wizard cards.",
+  "author": {
+    "name": "angelo.yang",
+    "email": "kingsj0405@gmail.com"
+  }
+}
