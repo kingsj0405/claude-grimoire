@@ -5,7 +5,11 @@ allowed-tools:
 ---
 
 state.json의 username + circle 으로 결정적 마법사 카드를 출력한다.
-`--name` 이나 `--circle` 인자는 `$ARGUMENTS`로 전달된다.
+인자는 `$ARGUMENTS`로 전달된다:
+- `--name`, `--circle` — 오버라이드
+- `--out <path>` — 파일로 저장
+- `--copy` — 클립보드에 복사 (pbcopy/wl-copy/xclip/xsel)
+- `--markdown` — ``` 코드블록 래핑 (Slack/Discord 붙여넣기용)
 
 !`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/grimoire.py" card $ARGUMENTS`
 

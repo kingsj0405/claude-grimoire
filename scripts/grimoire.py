@@ -647,6 +647,26 @@ def render_card(identity: Identity) -> str:
     return "\n".join(lines)
 
 
+CLIPBOARD_COMMANDS = (
+    ["pbcopy"],
+    ["wl-copy"],
+    ["xclip", "-selection", "clipboard"],
+    ["xsel", "--clipboard", "--input"],
+)
+
+
+def _copy_to_clipboard(payload: str) -> tuple[bool, str]:
+    for cmd in CLIPBOARD_COMMANDS:
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            subprocess.run(cmd, input=payload, text=True, check=True, timeout=5)
+        except (subprocess.SubprocessError, OSError) as exc:
+            return False, f"{cmd[0]}: {exc}"
+        return True, cmd[0]
+    return False, "no clipboard tool found (pbcopy/wl-copy/xclip/xsel)"
+
+
 def cmd_card(args: argparse.Namespace) -> int:
     state = load_state()
     username = (
@@ -663,7 +683,28 @@ def cmd_card(args: argparse.Namespace) -> int:
         print(f"[error] circle must be 1..10, got {circle}", file=sys.stderr)
         return 2
     identity = generate_identity(username, circle)
-    print(render_card(identity))
+    payload = render_card(identity)
+    if args.markdown:
+        payload = "```\n" + payload + "\n```"
+
+    did_side_effect = False
+    if args.out:
+        out_path = Path(args.out).expanduser()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload + "\n", encoding="utf-8")
+        print(f"[card] saved to {out_path}", file=sys.stderr)
+        did_side_effect = True
+    if args.copy:
+        ok, info = _copy_to_clipboard(payload)
+        if ok:
+            print(f"[card] copied to clipboard via {info}", file=sys.stderr)
+        else:
+            print(f"[card] clipboard copy failed: {info}", file=sys.stderr)
+            return 4
+        did_side_effect = True
+
+    if not did_side_effect:
+        print(payload)
     return 0
 
 
@@ -701,6 +742,9 @@ def main(argv: list[str] | None = None) -> int:
     p_card = sub.add_parser("card", help="ASCII 마법사 카드 출력")
     p_card.add_argument("--name", help="이름 오버라이드 (기본: state.json의 username)")
     p_card.add_argument("--circle", type=int, help="서클 오버라이드")
+    p_card.add_argument("--out", help="렌더링 결과를 파일로 저장 (stdout 출력은 생략)")
+    p_card.add_argument("--copy", action="store_true", help="클립보드에 복사 (pbcopy/wl-copy/xclip/xsel)")
+    p_card.add_argument("--markdown", action="store_true", help="``` 코드블록으로 래핑")
     p_card.set_defaults(func=cmd_card)
 
     p_show = sub.add_parser("show", help="state.json 요약 출력")
