@@ -122,6 +122,40 @@ def _git_branch_count(cwd: Path) -> int:
     return len([line for line in out.stdout.splitlines() if line.strip()])
 
 
+def _git_commit_count(cwd: Path, path: str = "CLAUDE.md") -> int:
+    """Count how many times a file has been committed (evidence of active maintenance)."""
+    git = shutil.which("git")
+    if not git:
+        return 0
+    try:
+        out = subprocess.run(
+            [git, "log", "--oneline", "--", path],
+            capture_output=True, text=True, cwd=str(cwd), timeout=5,
+        )
+        if out.returncode != 0:
+            return 0
+        return len([ln for ln in out.stdout.splitlines() if ln.strip()])
+    except (subprocess.SubprocessError, OSError):
+        return 0
+
+
+def _count_agent_tool_calls() -> int:
+    """Count Agent tool_use lines in messages.jsonl files (metadata scan, no content read)."""
+    projects = Path.home() / ".claude" / "projects"
+    if not projects.is_dir():
+        return 0
+    count = 0
+    for jsonl in projects.rglob("messages.jsonl"):
+        try:
+            text = jsonl.read_bytes().decode("utf-8", errors="ignore")
+            for line in text.splitlines():
+                if '"Agent"' in line and '"tool_use"' in line:
+                    count += 1
+        except OSError:
+            continue
+    return count
+
+
 def collect(cwd: Path) -> Collection:
     project_claude_md = _read(cwd / "CLAUDE.md")
     global_claude_md = _read(Path.home() / ".claude" / "CLAUDE.md")
@@ -327,6 +361,138 @@ def _score_collaboration(col: Collection) -> tuple[int, list[str], list[str]]:
     return min(score, 10), strengths, gaps
 
 
+# ---------------------------------------------------------------------------
+# Scoring v2 helpers
+# ---------------------------------------------------------------------------
+
+
+def _score_claude_md_v2(
+    text: str | None, claude_md_commits: int
+) -> tuple[int, list[str], list[str]]:
+    """claudeMdMaturity v2: same structure as v1 + git-commit evidence bonus (max 5)."""
+    score, strengths, gaps = _score_claude_md(text)
+    if claude_md_commits >= 5:
+        bonus = 5
+        strengths.append(f"CLAUDE.md를 {claude_md_commits}회 이상 커밋하며 운영 중입니다.")
+    elif claude_md_commits >= 2:
+        bonus = 3
+        strengths.append(f"CLAUDE.md를 {claude_md_commits}회 이상 수정했습니다.")
+    elif claude_md_commits >= 1:
+        bonus = 1
+        strengths.append("CLAUDE.md가 최소 1회 커밋되었습니다.")
+    else:
+        bonus = 0
+    return min(score + bonus, 25), strengths, gaps
+
+
+def _score_parallel_v2(
+    col: Collection, agent_call_count: int
+) -> tuple[int, list[str], list[str]]:
+    """parallelSessions v2: keyword-only boosts capped at 5 when no tmux/agent evidence."""
+    strengths: list[str] = []
+    gaps: list[str] = []
+
+    n = col.tmux_sessions
+    if n == 0:
+        base = 0
+        has_evidence = False
+        gaps.append("tmux 세션이 감지되지 않습니다.")
+    elif n <= 2:
+        base = 10
+        has_evidence = True
+        strengths.append(f"tmux 세션 {n}개 — 이중 시전이 가능한 기반입니다.")
+    elif n <= 4:
+        base = 15
+        has_evidence = True
+        strengths.append(f"tmux 세션 {n}개 — 바람의 직조사 범위에 있습니다.")
+    else:
+        base = 20
+        has_evidence = True
+        strengths.append(f"tmux 세션 {n}개 — 성좌 술사 이상의 규모입니다.")
+
+    # Agent-call evidence bonus (max +5)
+    if agent_call_count >= 10:
+        base = min(base + 5, 25)
+        has_evidence = True
+        strengths.append(
+            f"서브에이전트 호출 {agent_call_count}회 확인 — 메타 오케스트레이션 실적이 있습니다."
+        )
+    elif agent_call_count >= 1:
+        base = min(base + 2, 25)
+        has_evidence = True
+        strengths.append(f"서브에이전트 호출 {agent_call_count}회 확인.")
+
+    text = (col.project_claude_md or "") + (col.global_claude_md or "")
+    lower = text.lower()
+
+    kw_boost = 0
+    if any(k in text or k.lower() in lower for k in PIPELINE_KEYWORDS):
+        kw_boost += 15
+        strengths.append("핸드오프/파이프라인 언급이 있습니다.")
+    else:
+        gaps.append("파이프라인/핸드오프 규약이 보이지 않습니다.")
+
+    if any(k in text or k.lower() in lower for k in META_KEYWORDS):
+        kw_boost += 10
+        strengths.append("메타 오케스트레이션 개념이 문서화되어 있습니다.")
+    else:
+        gaps.append("메타 오케스트레이션(Claude가 Claude를 분배) 규약이 없습니다.")
+
+    # Keyword cap: no real evidence → max 5 total from keywords
+    if not has_evidence:
+        kw_boost = min(kw_boost, 5)
+
+    return min(base + kw_boost, 30), strengths, gaps
+
+
+def score_collection_v2(col: Collection, cwd: Path) -> dict:
+    """Rubric v2: evidence-weighted scoring.
+
+    Key differences from v1:
+    - claudeMdMaturity: +5 bonus for active git maintenance of CLAUDE.md
+    - parallelSessions: keyword-only boosts capped at 5 when tmux=0 and no agent calls
+    - Evidence subkey added to result for transparency
+    """
+    claude_md_commits = _git_commit_count(cwd, "CLAUDE.md")
+    agent_calls = _count_agent_tool_calls()
+
+    cm_score, cm_s, cm_g = _score_claude_md_v2(col.project_claude_md, claude_md_commits)
+    par_score, par_s, par_g = _score_parallel_v2(col, agent_calls)
+    auto_score, auto_s, auto_g = _score_automation(col)
+    ts_score, ts_s, ts_g = _score_task_structure(col)
+    coll_score, coll_s, coll_g = _score_collaboration(col)
+
+    breakdown = {
+        "claudeMdMaturity": cm_score,
+        "parallelSessions": par_score,
+        "automation": auto_score,
+        "taskStructure": ts_score,
+        "collaboration": coll_score,
+    }
+    total = sum(breakdown.values())
+
+    circle = 10
+    for idx, cut in enumerate(SCORE_CUTS, start=1):
+        if total <= cut:
+            circle = idx
+            break
+
+    title_ko, _ = CIRCLE_TITLES[circle]
+    return {
+        "score": total,
+        "circle": circle,
+        "title": title_ko,
+        "breakdown": breakdown,
+        "strengths": cm_s + par_s + auto_s + ts_s + coll_s,
+        "gaps": cm_g + par_g + auto_g + ts_g + coll_g,
+        "evidence": {
+            "claude_md_commits": claude_md_commits,
+            "tmux_sessions": col.tmux_sessions,
+            "agent_tool_calls": agent_calls,
+        },
+    }
+
+
 def score_collection(col: Collection) -> dict:
     cm_score, cm_s, cm_g = _score_claude_md(col.project_claude_md)
     par_score, par_s, par_g = _score_parallel(col)
@@ -391,10 +557,18 @@ def save_state(data: dict) -> Path:
 def cmd_scan(args: argparse.Namespace) -> int:
     cwd = Path(args.dir).resolve() if args.dir else Path.cwd()
     col = collect(cwd)
-    result = score_collection(col)
+
+    rubric = getattr(args, "rubric", "v1")
+    if rubric == "v2":
+        result = score_collection_v2(col, cwd)
+        version = "0.2.0"
+    else:
+        result = score_collection(col)
+        version = "0.1.0"
 
     state = {
-        "version": "0.1.0",
+        "version": version,
+        "rubric": rubric,
         "circle": result["circle"],
         "title": result["title"],
         "score": result["score"],
@@ -407,6 +581,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         "tmux_sessions": col.tmux_sessions,
         "project_commands": col.project_commands,
     }
+    if rubric == "v2" and "evidence" in result:
+        state["evidence"] = result["evidence"]
     path = save_state(state)
 
     _, title_en = CIRCLE_TITLES[result["circle"]]
@@ -733,6 +909,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_scan = sub.add_parser("scan", help="환경 수집 + 서클 판정 + state.json 기록")
     p_scan.add_argument("--dir", help="스캔할 프로젝트 루트 (기본: cwd)")
+    p_scan.add_argument(
+        "--rubric",
+        choices=["v1", "v2"],
+        default="v1",
+        help="채점 루브릭 버전 (v1: 기본/keyword-only, v2: evidence-weighted)",
+    )
     p_scan.set_defaults(func=cmd_scan)
 
     p_book = sub.add_parser("book", help="N서클 마법책 출력")
