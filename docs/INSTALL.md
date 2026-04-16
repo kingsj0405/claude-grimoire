@@ -12,7 +12,7 @@
 ### 2.1. statusline 등록
 
 ```bash
-cd /Users/angelo.yang/Projects/src/claude-grimoire
+cd /path/to/claude-grimoire   # 레포 루트
 bash scripts/install-statusline.sh
 ```
 
@@ -20,10 +20,28 @@ bash scripts/install-statusline.sh
 1. `~/.claude/settings.json`을 `.bak.{타임스탬프}`로 백업.
 2. `statusLine.command`를 `<repo>/statusline/statusline.sh`로 설정.
 
-### 2.2. 로컬 마켓플레이스 등록 (최초 1회, 수동)
+### 2.2. 로컬 마켓플레이스 등록 (최초 1회)
+
+권장: 스크립트 사용
 
 ```bash
+bash scripts/install-dev-plugin.sh
+```
+
+스크립트가 하는 일:
+1. `~/.claude/plugins/marketplaces/local-dev/.claude-plugin/` + `plugins/` 디렉토리 생성.
+2. `plugins/grimoire` → 레포 루트 심볼릭 링크 생성 (marketplace source는 marketplace 루트 기준 **상대 경로**만 허용).
+3. `marketplace.json` 작성 (`source: "./plugins/grimoire"`).
+4. `~/.claude/settings.json` 백업 후 `extraKnownMarketplaces["local-dev"]` 항목 추가 (`source: {source: "directory", path: ...}`).
+
+수동 절차 (스크립트 내용과 동일):
+
+```bash
+PLUGIN_ROOT="$(pwd)"  # 레포 루트에서 실행
 mkdir -p ~/.claude/plugins/marketplaces/local-dev/.claude-plugin
+mkdir -p ~/.claude/plugins/marketplaces/local-dev/plugins
+ln -sfn "$PLUGIN_ROOT" \
+  ~/.claude/plugins/marketplaces/local-dev/plugins/grimoire
 ```
 
 `~/.claude/plugins/marketplaces/local-dev/.claude-plugin/marketplace.json`:
@@ -31,33 +49,35 @@ mkdir -p ~/.claude/plugins/marketplaces/local-dev/.claude-plugin
 ```json
 {
   "name": "local-dev",
-  "owner": {"name": "angelo.yang"},
+  "owner": {"name": "<your-name>"},
   "plugins": [
     {
       "name": "grimoire",
       "description": "Circle-based Claude Code maturity tracker",
       "version": "0.1.0",
-      "author": {"name": "angelo.yang"},
-      "source": "/Users/angelo.yang/Projects/src/claude-grimoire"
+      "author": {"name": "<your-name>"},
+      "source": "./plugins/grimoire"
     }
   ]
 }
 ```
 
-`~/.claude/settings.json`에 (백업 후):
+`~/.claude/settings.json`에 (백업 후, `$HOME`을 실제 경로로 치환):
 
 ```json
 {
   "extraKnownMarketplaces": {
     "local-dev": {
       "source": {
-        "source": "local",
-        "path": "/Users/angelo.yang/.claude/plugins/marketplaces/local-dev"
+        "source": "directory",
+        "path": "$HOME/.claude/plugins/marketplaces/local-dev"
       }
     }
   }
 }
 ```
+
+> 주의: marketplace.json의 plugin `source`는 **절대 경로 금지** — marketplace 루트 기준 `./...` 상대 경로만 인식된다. 레포가 marketplace 밖에 있을 땐 반드시 `plugins/<name>` 심볼릭 링크로 연결한다.
 
 ### 2.3. Claude Code 재시작 + 설치
 

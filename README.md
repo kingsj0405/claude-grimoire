@@ -8,16 +8,17 @@
 ## 빠른 시작 (dev install)
 
 ```bash
-# 1) 플러그인 루트로 이동
-cd /Users/angelo.yang/Projects/src/claude-grimoire
+# 1) 레포 클론 후 루트로 이동
+git clone https://github.com/kingsj0405/claude-grimoire.git
+cd claude-grimoire
 
 # 2) statusline 등록
 bash scripts/install-statusline.sh
 
 # 3) 플러그인을 로컬 마켓플레이스에 등록 (최초 1회)
-bash scripts/install-dev-plugin.sh  # 아직 미구현 — docs/INSTALL.md 수동 절차 참고
+bash scripts/install-dev-plugin.sh
 
-# 4) Claude Code에서
+# 4) Claude Code 재시작 후
 /plugin install grimoire@local-dev
 /grimoire scan
 ```

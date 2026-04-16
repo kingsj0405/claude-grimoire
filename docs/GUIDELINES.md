@@ -82,8 +82,8 @@
   "strengths": ["CLAUDE.md 규약이 성숙합니다"],
   "gaps": ["감시 세션 패턴이 없습니다"],
   "scanned_at": "2026-04-16T10:30:00+09:00",
-  "scan_dir": "/Users/angelo.yang/Projects/src/lgair_sejong_root",
-  "username": "angelo.yang"
+  "scan_dir": "/path/to/your/project",
+  "username": "<current-user>"
 }
 ```
 
@@ -101,5 +101,6 @@ rng = random.Random(seed)
 
 ## 원본 가이드
 
-`/Users/angelo.yang/Downloads/claude-grimoire-dev-guide.md` —
-Phase 2 MCP, Phase 3 커뮤니티 등 후속 기능 포함. 당장은 MVP만 관심.
+로컬 원본 설계 가이드 (`claude-grimoire-dev-guide.md`)에
+Phase 2 MCP, Phase 3 커뮤니티 등 후속 기능이 포함돼 있으나 공개 repo에는 포함하지 않는다.
+당장은 MVP만 관심.
